@@ -28,9 +28,13 @@ module Mover
       from_class = self
       
       # Conditions
-      conditions = options[:conditions] || '1'
-      conditions = self.sanitize_sql(conditions)
-      where = "WHERE #{conditions}"
+      conditions = options[:conditions]
+      if conditions
+        conditions = self.sanitize_sql(conditions)
+        where = "WHERE #{conditions}"
+      else
+        where = ""
+      end
       
       # Columns
       magic = options[:magic] || 'moved_at'
@@ -127,9 +131,12 @@ module Mover
             UPDATE #{update.join(', ')};
           SQL
         else
-          conditions.gsub!(/(?<!_)#{to[:table]}(?!_)/,'t')
-          conditions.gsub!(/(?<!_)#{from[:table]}(?!_)/,'f')
-          conditions.gsub!(/(?<!\.)\"id\"/,'f."id"') if connection.class.to_s.include?('PostgreSQL')
+          if conditions
+            conditions.gsub!(/(?<!_)#{to[:table]}(?!_)/,'t')
+            conditions.gsub!(/(?<!_)#{from[:table]}(?!_)/,'f')
+            conditions.gsub!(/(?<!\.)\"id\"/,'f."id"') if connection.class.to_s.include?('PostgreSQL')
+            conditions = "AND #{conditions}"
+          end
           
           select = insert.values.collect { |i| i.include?("'") ? i : "f.#{i}" }
           set = insert.collect do |column, value|
@@ -149,7 +156,7 @@ module Mover
               FROM #{from[:table]}
                 AS f
               WHERE f.id = t.id
-                AND #{conditions}
+                #{conditions}
             SQL
           else
             connection.execute(<<-SQL)
@@ -158,7 +165,7 @@ module Mover
               INNER JOIN #{from[:table]}
                 AS f
               ON f.id = t.id
-                AND #{conditions}
+                #{conditions}
               SET #{set.join(', ')}
             SQL
           end
@@ -173,7 +180,7 @@ module Mover
             ON f.id = t.id
             WHERE (
               t.id IS NULL
-              AND #{conditions}
+              #{conditions}
             )
           SQL
         end
